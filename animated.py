@@ -1064,6 +1064,7 @@ def word_count(
 # --------------------------------------------------------------------------- #
 ROUND_RADIUS = 0.24  # proporción del lado para las esquinas redondeadas
 TYPE_FRACTION = 0.55  # parte del loop que tarda la máquina de escribir
+TYPE_HOLD_END = 0.80  # desde aquí se borra, antes de repetir el loop
 
 
 def _blank_like(image: Image.Image) -> Image.Image:
@@ -1118,6 +1119,27 @@ def _ease_out_back(value: float) -> float:
     return 1 + (back + 1) * shift**3 + back * shift**2
 
 
+def _loop_phase(t: float, enter: float, hold_end: float, exit_end: float = 0.94) -> float:
+    """0 → 1 en la entrada, 1 mientras se mantiene y 0 al final del loop.
+
+    Los efectos de una sola pasada empiezan y acaban en el mismo estado, así
+    que al repetir el loop no hay salto. Sin esto la palabra se recomponía de
+    golpe al final y, como cada emoji se reproduce por su cuenta, parecía que
+    cada trozo iba a su ritmo. El último fotograma es el previo al corte, así
+    que la salida termina en `exit_end` y no en 1.0: de otro modo el video
+    volvía a empezar a mitad de la salida.
+    """
+    if t <= 0:
+        return 0.0
+    if t < enter:
+        return t / enter
+    if t < hold_end:
+        return 1.0
+    if t >= exit_end:
+        return 0.0
+    return (exit_end - t) / (exit_end - hold_end)
+
+
 def _motion_layers(
     mask: Image.Image,
     outline: Image.Image,
@@ -1150,7 +1172,7 @@ def _motion_layers(
         # punta. Con un ease-out el primer trozo se escribía casi de golpe y el
         # último tardaba mucho más, y al verlo como emojis separados parecía
         # que cada uno iba a su propio ritmo.
-        progress = min(1.0, t / TYPE_FRACTION)
+        progress = _loop_phase(t, TYPE_FRACTION, TYPE_HOLD_END)
         edge = int(left + span * progress)
         wipe = Image.new("L", (width, height), 0)
         ImageDraw.Draw(wipe).rectangle((0, 0, edge, height), fill=255)
@@ -1163,7 +1185,7 @@ def _motion_layers(
         if progress < 1:
             cursor = (edge, bbox[1], bbox[3])
     elif motion == "pop":
-        progress = min(1.0, t / 0.45)
+        progress = _loop_phase(t, 0.40, 0.78)
         factor = max(0.25, _ease_out_back(progress))
         mask = _scale_layer(mask, factor)
         outline = _scale_layer(outline, factor)
@@ -1181,7 +1203,7 @@ def _motion_layers(
         outline = _rotate_layer(outline, angle, center)
         shadow = _rotate_layer(shadow, angle, center)
     elif motion == "fade":
-        progress = min(1.0, t / 0.4)
+        progress = _loop_phase(t, 0.25, 0.76)
         factor = 1 - (1 - progress) ** 2
         # Escalar el alfa de cada capa sin tocar su forma.
         def fade(image: Image.Image) -> Image.Image:
@@ -1196,9 +1218,12 @@ def _motion_layers(
         outline = fade(outline)
         shadow = fade(shadow)
     elif motion == "slide":
-        progress = min(1.0, t / 0.4)
-        eased = 1 - (1 - progress) ** 3
-        dx = -width * 0.30 * (1 - eased)
+        # Entra por la izquierda, se queda y vuelve a salir por la izquierda:
+        # empieza y acaba fuera en el mismo lado, así el loop no da salto.
+        progress = _loop_phase(t, 0.32, 0.72)
+        dx = -width * 0.40 * (1 - (1 - (1 - progress)) ** 3) if progress < 1 else 0.0
+        # suavizado simétrico: fuera (-offset) -> 0 -> fuera (-offset)
+        dx = -width * 0.40 * (1 - progress) ** 2
         mask = _shift_layer(mask, dx, 0)
         outline = _shift_layer(outline, dx, 0)
         shadow = _shift_layer(shadow, dx, 0)
@@ -1271,28 +1296,26 @@ def _motion_layers(
         outline = _scale_layer(outline, factor)
         shadow = _scale_layer(shadow, factor)
     elif motion == "drop":
-        progress = min(1.0, t / 0.5)
-        dy = -height * 0.55 * (1 - _ease_out_back(progress))
+        # Cae desde arriba, se queda y vuelve a subir: empieza y acaba fuera por
+        # arriba, así el loop no salta.
+        if t < 0.40:
+            progress = t / 0.40
+            dy = -height * 0.75 * (1 - _ease_out_back(progress))
+        elif t < 0.72:
+            dy = 0.0
+        elif t < 0.94:
+            progress = (t - 0.72) / 0.22
+            dy = -height * 0.75 * progress**2
+        else:
+            dy = -height * 0.75
         mask = _shift_layer(mask, 0, dy)
         outline = _shift_layer(outline, 0, dy)
         shadow = _shift_layer(shadow, 0, dy)
     elif motion == "scroll":
-        # Marquesina infinita: la palabra sale por la izquierda y la copia que
-        # entra por la derecha es la misma imagen, así el recorrido se repite
-        # sin salto. Al moverse la palabra completa, todos los trozos van en
-        # fase: el corte entre dos emojis nunca se ve.
-        dx = -width * t
-        offset = int(round(dx))
-
-        def wrap(layer: Image.Image) -> Image.Image:
-            out = _blank_like(layer)
-            out.paste(layer, (offset, 0))
-            out.paste(layer, (offset + width, 0))
-            return out
-
-        mask = wrap(mask)
-        outline = wrap(outline)
-        shadow = wrap(shadow)
+        # El lienzo completo se desplaza al final del render (fondo, borde,
+        # texto y emojis a la vez): si solo se movieran las capas del texto, la
+        # palabra se deslizaría sobre su propio fondo y se vería rota.
+        pass
 
     return mask, outline, shadow, cursor
 
@@ -1522,6 +1545,17 @@ def _render_word(
                     canvas.alpha_composite(pulsing)
                 else:
                     canvas.alpha_composite(rim)
+
+        if motion == "scroll":
+            # Marquesina infinita: se mueve el lienzo entero (fondo, borde,
+            # texto y emojis) una tira completa por loop y se enrolla, así los
+            # trozos siguen siendo el recorte exacto de la misma palabra y no se
+            # ve ninguna unión.
+            offset = int(round(-width * (index / total_frames)))
+            wrapped = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+            wrapped.paste(canvas, (offset, 0))
+            wrapped.paste(canvas, (offset + width, 0))
+            canvas = wrapped
 
         # Se reduce el lienzo completo antes de cortar: así el reescalado es
         # continuo y no aparece una costura en la unión de dos emojis.
