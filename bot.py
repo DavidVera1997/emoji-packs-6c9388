@@ -970,7 +970,7 @@ ANIM_SPEED_ORDER = ("slow", "normal", "fast")
 # Cada opción del menú lleva un custom emoji de muestra para que se vea cómo
 # queda antes de elegirla. El bot crea una vez un pack de ejemplos propio y
 # guarda los ids en data/examples.json.
-EXAMPLE_VERSION = 5
+EXAMPLE_VERSION = 7
 EXAMPLE_TEXT = "Abcd"
 EXAMPLE_CACHE_KEY = 0
 # Cada opción puede ocupar varios emojis (texto grande repartido en trozos).
@@ -2906,6 +2906,61 @@ async def on_channel_photo(message: Message, bot: Bot, store: Store) -> None:
         return
     if changed:
         logger.info("Emoji actualizado por cambio de foto en %s", message.chat.id)
+
+
+INCOMING_DIR = os.getenv("INCOMING_DIR", "data/incoming")
+
+
+@dp.message(F.chat.type == ChatType.PRIVATE)
+async def capture_custom_emojis(message: Message, bot: Bot) -> None:
+    """Guarda los emojis premium que llegan al chat para analizar su animación.
+
+    Cada emoji se guarda en su propio archivo (.webm animado, .tgs o .webp) con
+    su id como nombre, sin mezclarlos: aunque lleguen varios en un mensaje se
+    tratan por separado.
+    """
+    ids: list[str] = [
+        entity.custom_emoji_id
+        for entity in (message.entities or [])
+        if entity.type == "custom_emoji" and entity.custom_emoji_id
+    ]
+    sticker = getattr(message, "sticker", None)
+    if sticker is not None and getattr(sticker, "custom_emoji_id", None):
+        ids.append(sticker.custom_emoji_id)
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        return
+    logger.info("Emojis recibidos: %s", ids)
+    os.makedirs(INCOMING_DIR, exist_ok=True)
+    try:
+        stickers = await bot.get_custom_emoji_stickers(custom_emoji_ids=ids)
+    except TelegramBadRequest:
+        logger.warning("No pude leer los emojis recibidos", exc_info=True)
+        return
+    for emoji_id, item in zip(ids, stickers):
+        if getattr(item, "is_video", False):
+            extension = "webm"
+        elif getattr(item, "is_animated", False):
+            extension = "tgs"
+        else:
+            extension = "webp"
+        path = os.path.join(INCOMING_DIR, f"{emoji_id}.{extension}")
+        try:
+            await bot.download(item.file_id, destination=path)
+        except Exception:  # noqa: BLE001 - nunca romper el resto de la captura
+            logger.warning("No pude descargar el emoji %s", emoji_id, exc_info=True)
+            continue
+        logger.info(
+            "Emoji capturado: id=%s set=%s video=%s animado=%s %sx%s %d bytes -> %s",
+            emoji_id,
+            item.set_name,
+            getattr(item, "is_video", None),
+            getattr(item, "is_animated", None),
+            item.width,
+            item.height,
+            os.path.getsize(path),
+            path,
+        )
 
 
 async def poll_logos(bot: Bot, store: Store, interval: int) -> None:

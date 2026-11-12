@@ -166,6 +166,15 @@ MOTIONS = {
     "fade": "Aparecer",
     "slide": "Deslizar",
     "shake": "Vibración",
+    "zoom": "Zoom suave",
+    "sway": "Balanceo",
+    "jelly": "Gelatina",
+    "float": "Flotar",
+    "glitch": "Glitch",
+    "flicker": "Parpadeo",
+    "heartbeat": "Latido doble",
+    "drop": "Caída",
+    "scroll": "Deslizar infinito",
 }
 
 # Efectos que se aplican al logo circular de un canal.
@@ -1081,6 +1090,20 @@ def _scale_layer(image: Image.Image, factor: float) -> Image.Image:
     return out
 
 
+def _stretch_layer(
+    image: Image.Image, scale_x: float, scale_y: float
+) -> Image.Image:
+    """Escala distinto en X y en Y sin salirse del lienzo (gelatina)."""
+    if abs(scale_x - 1) < 0.002 and abs(scale_y - 1) < 0.002:
+        return image
+    width = max(1, int(round(image.width * scale_x)))
+    height = max(1, int(round(image.height * scale_y)))
+    resized = image.resize((width, height), Image.LANCZOS)
+    out = _blank_like(image)
+    out.paste(resized, ((image.width - width) // 2, (image.height - height) // 2))
+    return out
+
+
 def _rotate_layer(
     image: Image.Image, angle: float, center: tuple[int, int]
 ) -> Image.Image:
@@ -1185,6 +1208,91 @@ def _motion_layers(
         mask = _shift_layer(mask, dx, 0)
         outline = _shift_layer(outline, dx, 0)
         shadow = _shift_layer(shadow, dx, 0)
+    elif motion == "zoom":
+        # Respiración suave: nunca crece por encima del original para no
+        # recortar la primera y la última letra contra el borde del emoji.
+        factor = 1 - 0.05 * (1 - math.cos(2 * math.pi * t)) / 2
+        mask = _scale_layer(mask, factor)
+        outline = _scale_layer(outline, factor)
+        shadow = _scale_layer(shadow, factor)
+    elif motion == "sway":
+        bbox = mask.getbbox() or (0, 0, width, height)
+        center = ((bbox[0] + bbox[2]) // 2, (bbox[1] + bbox[3]) // 2)
+        angle = 4.5 * math.sin(2 * math.pi * t)
+        mask = _rotate_layer(mask, angle, center)
+        outline = _rotate_layer(outline, angle, center)
+        shadow = _rotate_layer(shadow, angle, center)
+    elif motion == "jelly":
+        wobble = math.sin(2 * math.pi * t)
+        scale_x = 1 + 0.045 * wobble
+        scale_y = 1 - 0.045 * wobble
+        mask = _stretch_layer(mask, scale_x, scale_y)
+        outline = _stretch_layer(outline, scale_x, scale_y)
+        shadow = _stretch_layer(shadow, scale_x, scale_y)
+    elif motion == "float":
+        dy = -math.sin(2 * math.pi * t) * height * 0.05
+        mask = _shift_layer(mask, 0, dy)
+        outline = _shift_layer(outline, 0, dy)
+        shadow = _shift_layer(shadow, 0, dy)
+    elif motion == "glitch":
+        # Saltos horizontales seudosaleatorios que empiezan y acaban quietos:
+        # así el loop no da un salto al repetir.
+        amount = 0.0
+        if 0.04 < t < 0.62:
+            step = int(t * FRAME_COUNT) // 2
+            rnd = ((step * 2654435761) % 997) / 997
+            amount = (rnd - 0.5) * 2
+        dx = amount * width * 0.016
+        mask = _shift_layer(mask, dx, 0)
+        outline = _shift_layer(outline, dx, 0)
+        shadow = _shift_layer(shadow, dx, 0)
+    elif motion == "flicker":
+        # Parpadeo tipo neón: la primera y la última imagen son iguales.
+        pulse = max(0.0, math.sin(2 * math.pi * 7 * t))
+        factor = 1 - 0.55 * pulse**6
+
+        def dim(image: Image.Image) -> Image.Image:
+            if image.mode == "L":
+                return image.point(lambda value: int(value * factor))
+            out = image.copy()
+            out.putalpha(
+                out.getchannel("A").point(lambda value: int(value * factor))
+            )
+            return out
+
+        mask = dim(mask)
+        outline = dim(outline)
+        shadow = dim(shadow)
+    elif motion == "heartbeat":
+        # Dos latidos por loop; el pico cae justo en el corte, sin salto.
+        beat = (0.5 + 0.5 * math.cos(4 * math.pi * t)) ** 6
+        factor = 1 + 0.09 * beat
+        mask = _scale_layer(mask, factor)
+        outline = _scale_layer(outline, factor)
+        shadow = _scale_layer(shadow, factor)
+    elif motion == "drop":
+        progress = min(1.0, t / 0.5)
+        dy = -height * 0.55 * (1 - _ease_out_back(progress))
+        mask = _shift_layer(mask, 0, dy)
+        outline = _shift_layer(outline, 0, dy)
+        shadow = _shift_layer(shadow, 0, dy)
+    elif motion == "scroll":
+        # Marquesina infinita: la palabra sale por la izquierda y la copia que
+        # entra por la derecha es la misma imagen, así el recorrido se repite
+        # sin salto. Al moverse la palabra completa, todos los trozos van en
+        # fase: el corte entre dos emojis nunca se ve.
+        dx = -width * t
+        offset = int(round(dx))
+
+        def wrap(layer: Image.Image) -> Image.Image:
+            out = _blank_like(layer)
+            out.paste(layer, (offset, 0))
+            out.paste(layer, (offset + width, 0))
+            return out
+
+        mask = wrap(mask)
+        outline = wrap(outline)
+        shadow = wrap(shadow)
 
     return mask, outline, shadow, cursor
 

@@ -85,6 +85,13 @@ extremos. El dibujo se desplaza unos píxeles (según el espacio libre) para que
 cada corte caiga sobre una letra y no en el hueco entre dos letras. Así el
 efecto recorre toda la palabra sin reiniciarse en cada emoji.
 
+Animaciones del texto (17): sin animación, máquina de escribir, pop, rebote,
+ola, aparecer, deslizar, vibración, zoom suave, balanceo, gelatina, flotar,
+glitch, parpadeo, latido doble, caída y **deslizar infinito** (marquesina: la
+palabra sale por un lado y vuelve a entrar por el otro sin salto). El texto
+lleva sombra por defecto y se puede quitar con la opción **🌑 Sombra** del
+asistente.
+
 ### Emoji desde una imagen
 
 Pulsa **🖼 Emoji desde imagen** o escribe `/emoji`:
