@@ -948,8 +948,8 @@ def _draw_word(
         # Sombra propia por fotograma: también sigue la animación.
         shadows = [
             frame.getchannel("A")
-            .filter(ImageFilter.GaussianBlur(stroke * 0.8))
-            .point(lambda value: int(value * 0.72))
+            .filter(ImageFilter.GaussianBlur(stroke * 0.9))
+            .point(lambda value: int(value * 0.88))
             for frame in frames
         ]
         placements.append((x, y, int(stroke * 0.6), frames, shadows))
@@ -958,9 +958,9 @@ def _draw_word(
     # Los emojis premium no llevan contorno duro (se recortaría contra el
     # borde del emoji) y su sombra se calcula fotograma a fotograma.
     shadow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    shadow.putalpha(outer.filter(ImageFilter.GaussianBlur(stroke * 0.8)))
-    shadow = _tinted(shadow, shadow.getchannel("A").point(lambda v: int(v * 0.72)))
-    shadow = ImageChops.offset(shadow, 0, int(stroke * 0.6))
+    shadow.putalpha(outer.filter(ImageFilter.GaussianBlur(stroke * 0.95)))
+    shadow = _tinted(shadow, shadow.getchannel("A").point(lambda v: int(v * 0.88)))
+    shadow = ImageChops.offset(shadow, 0, int(stroke * 0.75))
     return {
         "mask": inner,
         "outline": outline,
@@ -1571,7 +1571,7 @@ def _render_word(
             # Banda de brillo que recorre el texto en cada ciclo.
             gx = -height + t * (width + height * 2)
             skew = int(height * 0.9)
-            band_w = max(18, int(width * 0.09))
+            band_w = max(20, int(width * 0.11))
             ImageDraw.Draw(gloss).polygon(
                 [
                     (gx, 0),
@@ -1579,12 +1579,12 @@ def _render_word(
                     (gx + band_w + skew, height),
                     (gx + skew, height),
                 ],
-                fill=230,
+                fill=255,
             )
-            gloss = gloss.filter(ImageFilter.GaussianBlur(max(6, height // 10)))
+            gloss = gloss.filter(ImageFilter.GaussianBlur(max(5, height // 12)))
             gloss_alpha = ImageChops.multiply(gloss, mask)
             shine = Image.new("RGBA", (width, height), (255, 255, 255, 0))
-            shine.putalpha(gloss_alpha.point(lambda v: int(v * 0.55)))
+            shine.putalpha(gloss_alpha.point(lambda v: int(v * 0.75)))
             canvas.alpha_composite(shine)
 
         # Los emojis premium conservan su color y su animación, y van encima
@@ -1780,13 +1780,13 @@ def _fit(image: Image.Image, size: int) -> Image.Image:
 
 
 
-def _apply_logo_gloss(image: Image.Image, t: float, strength: float = 0.42) -> Image.Image:
+def _apply_logo_gloss(image: Image.Image, t: float, strength: float = 0.72) -> Image.Image:
     """Aplica una banda de brillo que recorre la figura y la sigue en su movimiento."""
     size = image.width
     gloss = Image.new("L", (size, size), 0)
     gx = -size + t * (size * 3)
     skew = int(size * 0.9)
-    band_w = max(18, int(size * 0.10))
+    band_w = max(20, int(size * 0.12))
     ImageDraw.Draw(gloss).polygon(
         [
             (gx, 0),
@@ -1794,9 +1794,9 @@ def _apply_logo_gloss(image: Image.Image, t: float, strength: float = 0.42) -> I
             (gx + band_w + skew, size),
             (gx + skew, size),
         ],
-        fill=230,
+        fill=255,
     )
-    gloss = gloss.filter(ImageFilter.GaussianBlur(max(6, size // 10)))
+    gloss = gloss.filter(ImageFilter.GaussianBlur(max(5, size // 12)))
     gloss_alpha = ImageChops.multiply(gloss, image.getchannel("A"))
     shine = Image.new("RGBA", (size, size), (255, 255, 255, 0))
     shine.putalpha(gloss_alpha.point(lambda v: int(v * strength)))
@@ -2182,6 +2182,18 @@ def render_logo_frames(
     for index in range(FRAME_COUNT):
         t = index / FRAME_COUNT
         frame = _logo_frame(logo, effect, t, colors, conic, ring, shape)
+        # Sombra que sigue al sujeto en movimiento.
+        if effect in ("spring", "wiggle", "levitate"):
+            alpha = frame.getchannel("A")
+            shadow_alpha = alpha.filter(ImageFilter.GaussianBlur(max(6, logo.width // 18)))
+            shadow_alpha = shadow_alpha.point(lambda v: int(v * 0.55))
+            shadow = Image.new("RGBA", (logo.width, logo.height), (0, 0, 0, 0))
+            shadow.putalpha(shadow_alpha)
+            offset = max(3, logo.width // 28)
+            base = Image.new("RGBA", (logo.width, logo.height), (0, 0, 0, 0))
+            base.alpha_composite(shadow, (0, offset))
+            base.alpha_composite(frame)
+            frame = base
         if background != "transparent":
             layer = _logo_background(
                 logo.width, colors, background, t * turns
