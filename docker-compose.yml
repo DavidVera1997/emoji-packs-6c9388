@@ -1,0 +1,14 @@
+services:
+  bot:
+    build: .
+    image: logo-emoji-bot
+    container_name: logo-emoji-bot
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
