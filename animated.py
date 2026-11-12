@@ -1779,6 +1779,32 @@ def _fit(image: Image.Image, size: int) -> Image.Image:
     return out
 
 
+
+def _apply_logo_gloss(image: Image.Image, t: float, strength: float = 0.42) -> Image.Image:
+    """Aplica una banda de brillo que recorre la figura y la sigue en su movimiento."""
+    size = image.width
+    gloss = Image.new("L", (size, size), 0)
+    gx = -size + t * (size * 3)
+    skew = int(size * 0.9)
+    band_w = max(18, int(size * 0.10))
+    ImageDraw.Draw(gloss).polygon(
+        [
+            (gx, 0),
+            (gx + band_w, 0),
+            (gx + band_w + skew, size),
+            (gx + skew, size),
+        ],
+        fill=230,
+    )
+    gloss = gloss.filter(ImageFilter.GaussianBlur(max(6, size // 10)))
+    gloss_alpha = ImageChops.multiply(gloss, image.getchannel("A"))
+    shine = Image.new("RGBA", (size, size), (255, 255, 255, 0))
+    shine.putalpha(gloss_alpha.point(lambda v: int(v * strength)))
+    result = image.copy()
+    result.alpha_composite(shine)
+    return result
+
+
 def _logo_frame(
     logo: Image.Image,
     effect: str,
@@ -2060,7 +2086,7 @@ def _logo_frame(
                 p = max(0.0, min(1.0, (t - t0) / span))
                 factor = v0 + (v1 - v0) * p
                 break
-        return _scale(logo, factor)
+        return _scale(_apply_logo_gloss(logo, t), factor)
 
     if effect == "wiggle":
         # Meneo vivo con giro de moneda visto desde arriba: rota, se aplana al
@@ -2071,7 +2097,8 @@ def _logo_frame(
         cosine = math.cos(2 * math.pi * t)
         coin_x = 0.26 + 0.74 * abs(cosine)
         dy = int(-math.sin(cycle) * size * 0.035)
-        face = logo.transpose(Image.FLIP_LEFT_RIGHT) if cosine < 0 else logo
+        base = _apply_logo_gloss(logo, t)
+        face = base.transpose(Image.FLIP_LEFT_RIGHT) if cosine < 0 else base
         image = _stretch(face, factor * coin_x, factor)
         if shape == "circle":
             rotated = image.rotate(angle, resample=Image.BICUBIC)
@@ -2104,7 +2131,8 @@ def _logo_frame(
         factor = 1.04 + 0.015 * math.sin(2 * math.pi * t)
         cosine = math.cos(2 * math.pi * t)
         coin_x = 0.26 + 0.74 * abs(cosine)
-        face = logo.transpose(Image.FLIP_LEFT_RIGHT) if cosine < 0 else logo
+        base = _apply_logo_gloss(logo, t)
+        face = base.transpose(Image.FLIP_LEFT_RIGHT) if cosine < 0 else base
         image = _stretch(face, factor * coin_x, factor)
         frame = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         frame.paste(image, (0, dy), image)
@@ -2154,26 +2182,6 @@ def render_logo_frames(
     for index in range(FRAME_COUNT):
         t = index / FRAME_COUNT
         frame = _logo_frame(logo, effect, t, colors, conic, ring, shape)
-        if effect in ("spring", "wiggle", "levitate"):
-            size = frame.width
-            gloss = Image.new("L", (size, size), 0)
-            gx = -size + t * (size * 3)
-            skew = int(size * 0.9)
-            band_w = max(18, int(size * 0.10))
-            ImageDraw.Draw(gloss).polygon(
-                [
-                    (gx, 0),
-                    (gx + band_w, 0),
-                    (gx + band_w + skew, size),
-                    (gx + skew, size),
-                ],
-                fill=230,
-            )
-            gloss = gloss.filter(ImageFilter.GaussianBlur(max(6, size // 10)))
-            gloss_alpha = ImageChops.multiply(gloss, frame.getchannel("A"))
-            shine = Image.new("RGBA", (size, size), (255, 255, 255, 0))
-            shine.putalpha(gloss_alpha.point(lambda v: int(v * 0.45)))
-            frame.alpha_composite(shine)
         if background != "transparent":
             layer = _logo_background(
                 logo.width, colors, background, t * turns
