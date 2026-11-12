@@ -101,8 +101,9 @@ Pulsa **🖼 Emoji desde imagen** o escribe `/emoji`:
 2. Elige la forma: **⭕ Círculo**, **⬜ Cuadrado** o **🔲 Redondeado** (cuadrado
    con esquinas redondeadas).
 3. Elige el efecto de animación entre los 24 disponibles.
-4. Ves la vista previa real como sticker, puedes cambiar forma o efecto y
-   guardarlo con **✅ Crear pack**.
+4. Ves la vista previa real como sticker. Puedes cambiar forma o efecto,
+   activar **✂️ Quitar fondo** para recortar el fondo automáticamente, elegir
+   un fondo de color y guardarlo con **✅ Crear pack**.
 
 Efectos disponibles: brillo, latido, moneda, giro 360°, rebote, balanceo,
 péndulo, vibración, arcoíris, aura, anillo, pop, **gota (onda)**, flotar,

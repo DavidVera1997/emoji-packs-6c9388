@@ -2200,10 +2200,11 @@ def generate_image_emoji(
     effect: str = "shine",
     palette: str = "neon",
     background: str = "transparent",
+    remove_bg: bool = False,
 ) -> bytes:
     """Anima una imagen y, si se pide, la compone sobre un fondo de color."""
     # Un poco de margen para que los efectos que crecen no se corten.
-    logo = _scale(shape_image(source, CANVAS, shape), 0.88)
+    logo = _scale(shape_image(source, CANVAS, shape, remove_bg=remove_bg), 0.88)
     frames = render_logo_frames(logo, effect, palette, shape, background)
     return encode_webm(frames)
 

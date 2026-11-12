@@ -2273,7 +2273,10 @@ def img_palette_kb(current: str = "neon") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def img_preview_kb(background: str = "transparent") -> InlineKeyboardMarkup:
+def img_preview_kb(
+    background: str = "transparent", remove_bg: bool = False
+) -> InlineKeyboardMarkup:
+    bg_cut = "✅ Quitar fondo" if remove_bg else "✂️ Quitar fondo"
     rows = [
         [
             InlineKeyboardButton(
@@ -2288,7 +2291,10 @@ def img_preview_kb(background: str = "transparent") -> InlineKeyboardMarkup:
                 text="🎞 Cambiar efecto", callback_data="img:back:effect"
             ),
         ],
-        [InlineKeyboardButton(text="🎨 Fondo", callback_data="img:background")],
+        [
+            InlineKeyboardButton(text="🎨 Fondo", callback_data="img:background"),
+            InlineKeyboardButton(text=bg_cut, callback_data="img:removebg"),
+        ],
     ]
     if background != "transparent":
         rows[-1].append(
@@ -2356,6 +2362,7 @@ async def img_received(message: Message, state: FSMContext) -> None:
         shape="rounded",
         background="transparent",
         palette="neon",
+        remove_bg=False,
     )
     await state.set_state(ImgWizard.shape)
     await message.answer(
@@ -2401,6 +2408,7 @@ async def _img_generate_preview(
     shape = str(data.get("shape") or "rounded")
     background = str(data.get("background") or "transparent")
     palette = str(data.get("palette") or "neon")
+    remove_bg = bool(data.get("remove_bg"))
     label = animated.LOGO_EFFECTS.get(effect, effect)
 
     try:
@@ -2412,12 +2420,13 @@ async def _img_generate_preview(
             effect,
             palette,
             background,
+            remove_bg,
         )
     except (InvalidImage, animated.EmojiError, TelegramBadRequest) as exc:
         with suppress(TelegramBadRequest):
             await callback.message.edit_text(
                 f"No pude animar la imagen: <i>{html.escape(str(exc))}</i>",
-                reply_markup=img_preview_kb(background),
+                reply_markup=img_preview_kb(background, remove_bg),
             )
         return
 
@@ -2430,12 +2439,14 @@ async def _img_generate_preview(
         f"✨ <b>{label}</b> · forma {IMG_SHAPES.get(shape, shape)}\n"
         f"Fondo: {animated.BACKGROUNDS.get(background, background)}"
     )
+    if remove_bg:
+        details += " · Recorte de fondo: sí"
     if background != "transparent":
         details += f" · Paleta: {animated.PALETTES.get(palette, {}).get('label', palette)}"
     with suppress(TelegramBadRequest):
         await callback.message.edit_text(
             f"{details}\n\n¿Lo guardo en tu pack animado?",
-            reply_markup=img_preview_kb(background),
+            reply_markup=img_preview_kb(background, remove_bg),
         )
 
 
@@ -2565,6 +2576,22 @@ async def cb_img_back_effect(callback: CallbackQuery, state: FSMContext) -> None
         await callback.message.edit_text(
             "🎞 <b>Elige el efecto</b> de animación:", reply_markup=img_effect_kb()
         )
+
+
+@dp.callback_query(F.data == "img:removebg", ImgWizard.preview)
+async def cb_img_remove_bg(
+    callback: CallbackQuery, bot: Bot, state: FSMContext
+) -> None:
+    data = await state.get_data()
+    new_value = not bool(data.get("remove_bg"))
+    await state.update_data(remove_bg=new_value)
+    state_text = "activado" if new_value else "desactivado"
+    await callback.answer(f"Recorte de fondo {state_text}")
+    with suppress(TelegramBadRequest):
+        await callback.message.edit_text(
+            f"✂️ Recorte automático de fondo <b>{state_text}</b>. Generando…"
+        )
+    await _img_generate_preview(callback, bot, state)
 
 
 @dp.callback_query(F.data == "img:save", ImgWizard.preview)
