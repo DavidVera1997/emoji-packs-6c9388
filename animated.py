@@ -2168,6 +2168,7 @@ def render_logo_frames(
     palette: str = "neon",
     shape: str = "circle",
     background: str = "transparent",
+    with_shadow: bool = True,
 ) -> list[bytes]:
     effect = effect if effect in LOGO_EFFECTS else "shine"
     background = background if background in BACKGROUNDS else "transparent"
@@ -2183,13 +2184,15 @@ def render_logo_frames(
         t = index / FRAME_COUNT
         frame = _logo_frame(logo, effect, t, colors, conic, ring, shape)
         # Sombra que sigue al sujeto en movimiento.
-        if effect in ("spring", "wiggle", "levitate"):
+        if with_shadow:
             alpha = frame.getchannel("A")
-            shadow_alpha = alpha.filter(ImageFilter.GaussianBlur(max(6, logo.width // 18)))
-            shadow_alpha = shadow_alpha.point(lambda v: int(v * 0.55))
+            blur = max(5, logo.width // 22)
+            shadow_alpha = alpha.filter(ImageFilter.GaussianBlur(blur))
+            strength = 0.55 if effect in ("spring", "wiggle", "levitate") else 0.40
+            shadow_alpha = shadow_alpha.point(lambda v: int(v * strength))
             shadow = Image.new("RGBA", (logo.width, logo.height), (0, 0, 0, 0))
             shadow.putalpha(shadow_alpha)
-            offset = max(3, logo.width // 28)
+            offset = max(2, logo.width // 30)
             base = Image.new("RGBA", (logo.width, logo.height), (0, 0, 0, 0))
             base.alpha_composite(shadow, (0, offset))
             base.alpha_composite(frame)
@@ -2221,11 +2224,14 @@ def generate_image_emoji(
     palette: str = "neon",
     background: str = "transparent",
     remove_bg: bool = False,
+    with_shadow: bool = True,
 ) -> bytes:
     """Anima una imagen y, si se pide, la compone sobre un fondo de color."""
     # Un poco de margen para que los efectos que crecen no se corten.
     logo = _scale(shape_image(source, CANVAS, shape, remove_bg=remove_bg), 0.88)
-    frames = render_logo_frames(logo, effect, palette, shape, background)
+    frames = render_logo_frames(
+        logo, effect, palette, shape, background, with_shadow=with_shadow
+    )
     return encode_webm(frames)
 
 
