@@ -1348,21 +1348,27 @@ def _motion_layers(
         # se inclina y cambia de tamaño a la vez que se menea.
         cycle = 2 * math.pi * t
         angle = 360 * t + 16 * math.sin(cycle)
-        # Giro de moneda visto desde arriba: se aplana en X al dar la vuelta.
-        coin_x = 0.18 + 0.82 * abs(math.cos(math.pi * t))
+        # Giro de moneda: se aplana en X y muestra la cara opuesta al dar la vuelta.
+        cosine = math.cos(2 * math.pi * t)
+        coin_x = 0.26 + 0.74 * abs(cosine)
         factor = 0.92 + 0.10 * (0.5 + 0.5 * math.sin(2 * cycle))
         dy = -math.sin(cycle) * height * 0.035
         bbox = mask.getbbox() or (0, 0, width, height)
         center = ((bbox[0] + bbox[2]) // 2, (bbox[1] + bbox[3]) // 2)
-        mask = _rotate_layer(_stretch_layer(mask, coin_x * factor, factor), angle, center)
-        outline = _rotate_layer(_stretch_layer(outline, coin_x * factor, factor), angle, center)
-        shadow = _rotate_layer(_stretch_layer(shadow, coin_x * factor, factor), angle, center)
+
+        def _coin_face(layer: Image.Image) -> Image.Image:
+            face = layer.transpose(Image.FLIP_LEFT_RIGHT) if cosine < 0 else layer
+            return _stretch_layer(face, coin_x * factor, factor)
+
+        mask = _rotate_layer(_coin_face(mask), angle, center)
+        outline = _rotate_layer(_coin_face(outline), angle, center)
+        shadow = _rotate_layer(_coin_face(shadow), angle, center)
         mask = _shift_layer(mask, 0, dy)
         outline = _shift_layer(outline, 0, dy)
         shadow = _shift_layer(shadow, 0, dy)
     elif motion == "levitate":
         # Levitación suave con giro de moneda: flota arriba y abajo y, a la vez,
-        # gira como moneda (se aplana en horizontal al dar la vuelta).
+        # gira como moneda mostrando la cara opuesta al dar la vuelta.
         kf = (
             (0.000, 0.010), (0.139, 0.115), (0.206, -0.045), (0.356, -0.115),
             (0.517, 0.082), (0.667, -0.049), (0.817, 0.049), (0.956, 0.010),
@@ -1380,11 +1386,17 @@ def _motion_layers(
                 break
         dy = dyf * height * 0.22
         factor = 1.04 + 0.015 * math.sin(2 * math.pi * t)
-        # Giro de moneda: la anchura se comprime y se recupera en cada vuelta.
-        coin_x = 0.18 + 0.82 * abs(math.cos(2 * math.pi * t))
-        mask = _shift_layer(_stretch_layer(mask, coin_x * factor, factor), 0, dy)
-        outline = _shift_layer(_stretch_layer(outline, coin_x * factor, factor), 0, dy)
-        shadow = _shift_layer(_stretch_layer(shadow, coin_x * factor, factor), 0, dy)
+        # Giro de moneda: se comprime y muestra la cara opuesta en la media vuelta.
+        cosine = math.cos(2 * math.pi * t)
+        coin_x = 0.26 + 0.74 * abs(cosine)
+
+        def _coin_face(layer: Image.Image) -> Image.Image:
+            face = layer.transpose(Image.FLIP_LEFT_RIGHT) if cosine < 0 else layer
+            return _stretch_layer(face, coin_x * factor, factor)
+
+        mask = _shift_layer(_coin_face(mask), 0, dy)
+        outline = _shift_layer(_coin_face(outline), 0, dy)
+        shadow = _shift_layer(_coin_face(shadow), 0, dy)
 
     return mask, outline, shadow, cursor
 
@@ -2030,13 +2042,15 @@ def _logo_frame(
 
     if effect == "wiggle":
         # Meneo vivo con giro de moneda visto desde arriba: rota, se aplana al
-        # girar y se menea a la vez.
+        # girar, muestra la cara opuesta y se menea a la vez.
         cycle = 2 * math.pi * t
         angle = 360 * t + 16 * math.sin(cycle)
         factor = 0.92 + 0.10 * (0.5 + 0.5 * math.sin(2 * cycle))
-        coin_x = 0.18 + 0.82 * abs(math.cos(math.pi * t))
+        cosine = math.cos(2 * math.pi * t)
+        coin_x = 0.26 + 0.74 * abs(cosine)
         dy = int(-math.sin(cycle) * size * 0.035)
-        image = _stretch(logo, factor * coin_x, factor)
+        face = logo.transpose(Image.FLIP_LEFT_RIGHT) if cosine < 0 else logo
+        image = _stretch(face, factor * coin_x, factor)
         if shape == "circle":
             rotated = image.rotate(angle, resample=Image.BICUBIC)
         else:
@@ -2048,7 +2062,7 @@ def _logo_frame(
         return frame
 
     if effect == "levitate":
-        # Levitación suave con giro de moneda: flota y gira como moneda.
+        # Levitación suave con giro de moneda: flota y gira mostrando la cara opuesta.
         kf = (
             (0.000, 0.010), (0.139, 0.115), (0.206, -0.045), (0.356, -0.115),
             (0.517, 0.082), (0.667, -0.049), (0.817, 0.049), (0.956, 0.010),
@@ -2066,8 +2080,10 @@ def _logo_frame(
                 break
         dy = int(dyf * size * 0.22)
         factor = 1.04 + 0.015 * math.sin(2 * math.pi * t)
-        coin_x = 0.18 + 0.82 * abs(math.cos(2 * math.pi * t))
-        image = _stretch(logo, factor * coin_x, factor)
+        cosine = math.cos(2 * math.pi * t)
+        coin_x = 0.26 + 0.74 * abs(cosine)
+        face = logo.transpose(Image.FLIP_LEFT_RIGHT) if cosine < 0 else logo
+        image = _stretch(face, factor * coin_x, factor)
         frame = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         frame.paste(image, (0, dy), image)
         return frame
