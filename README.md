@@ -4,7 +4,7 @@ Bot de Telegram que toma la foto de perfil de un canal, la recorta en **círculo
 la deja en **100×100** y crea un pack de **custom emojis** (`t.me/addemoji/…`).
 Cuando cambias el logo, el pack se actualiza solo. También genera **emojis
 animados** con texto, degradados y bordes en movimiento, y **emojis animados a
-partir de una imagen** (redondo, cuadrado o redondeado) con 21 efectos. Todo se
+partir de una imagen** (redondo, cuadrado o redondeado) con 24 efectos. Todo se
 gestiona desde el propio chat del bot.
 
 ## Arranque con Docker
@@ -85,9 +85,9 @@ extremos. El dibujo se desplaza unos píxeles (según el espacio libre) para que
 cada corte caiga sobre una letra y no en el hueco entre dos letras. Así el
 efecto recorre toda la palabra sin reiniciarse en cada emoji.
 
-Animaciones del texto (17): sin animación, máquina de escribir, pop, rebote,
+Animaciones del texto (20): sin animación, máquina de escribir, pop, rebote,
 ola, aparecer, deslizar, vibración, zoom suave, balanceo, gelatina, flotar,
-glitch, parpadeo, latido doble, caída y **deslizar infinito** (marquesina: la
+glitch, parpadeo, latido doble, caída, **deslizar infinito**, resorte, meneo y levitación (marquesina: la
 palabra sale por un lado y vuelve a entrar por el otro sin salto). El texto
 lleva sombra por defecto y se puede quitar con la opción **🌑 Sombra** del
 asistente.
@@ -100,13 +100,13 @@ Pulsa **🖼 Emoji desde imagen** o escribe `/emoji`:
    deformarla.
 2. Elige la forma: **⭕ Círculo**, **⬜ Cuadrado** o **🔲 Redondeado** (cuadrado
    con esquinas redondeadas).
-3. Elige el efecto de animación entre los 21 disponibles.
+3. Elige el efecto de animación entre los 24 disponibles.
 4. Ves la vista previa real como sticker, puedes cambiar forma o efecto y
    guardarlo con **✅ Crear pack**.
 
 Efectos disponibles: brillo, latido, moneda, giro 360°, rebote, balanceo,
 péndulo, vibración, arcoíris, aura, anillo, pop, **gota (onda)**, flotar,
-voltear, gelatina, latido doble, órbita, ondas, destellos y neón. La gota hace
+voltear, gelatina, latido doble, órbita, ondas, destellos, neón, resorte, meneo y levitación. La gota hace
 que la imagen aumente y disminuya como una onda; los efectos que crecen se
 escalan para que no se corten en el borde del emoji.
 

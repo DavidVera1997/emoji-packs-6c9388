@@ -175,6 +175,9 @@ MOTIONS = {
     "heartbeat": "Latido doble",
     "drop": "Caída",
     "scroll": "Deslizar infinito",
+    "spring": "Resorte",
+    "wiggle": "Meneo",
+    "levitate": "Levitación",
 }
 
 # Efectos que se aplican al logo circular de un canal.
@@ -200,6 +203,9 @@ LOGO_EFFECTS = {
     "ripple": "Ondas",
     "sparkle": "Destellos",
     "neon": "Neón",
+    "spring": "Resorte",
+    "wiggle": "Meneo",
+    "levitate": "Levitación",
 }
 
 # Vueltas completas por loop: entero para que el emoji loopee sin salto.
@@ -1316,6 +1322,64 @@ def _motion_layers(
         # texto y emojis a la vez): si solo se movieran las capas del texto, la
         # palabra se deslizaría sobre su propio fondo y se vería rota.
         pass
+    elif motion == "spring":
+        # Rebote elástico amortiguado (inspirado en emoji CryptoPJ): se comprime,
+        # sobrepasa y oscila hasta asentarse, y repite el ciclo sin salto.
+        kf = (
+            (0.000, 1.000), (0.167, 0.750), (0.211, 1.000), (0.254, 1.107),
+            (0.339, 0.947), (0.425, 1.026), (0.510, 0.987), (0.596, 1.006),
+            (0.681, 0.997), (0.767, 1.002), (0.852, 0.999), (0.876, 0.999),
+            (0.994, 1.000),
+        )
+        factor = 1.0
+        for i in range(len(kf) - 1):
+            t0, v0 = kf[i]
+            t1, v1 = kf[i + 1]
+            if t <= t1 or i == len(kf) - 2:
+                span = max(1e-6, t1 - t0)
+                p = max(0.0, min(1.0, (t - t0) / span))
+                factor = v0 + (v1 - v0) * p
+                break
+        mask = _scale_layer(mask, factor)
+        outline = _scale_layer(outline, factor)
+        shadow = _scale_layer(shadow, factor)
+    elif motion == "wiggle":
+        # Meneo vivo: se inclina a un lado y a otro con cambios de tamaño, en un
+        # vaivén que arranca y termina en la misma pose.
+        cycle = 2 * math.pi * t
+        angle = 18 * math.sin(cycle) * math.cos(cycle * 0.5 + 0.4)
+        factor = 0.92 + 0.10 * (0.5 + 0.5 * math.sin(2 * cycle))
+        dy = -math.sin(cycle) * height * 0.035
+        bbox = mask.getbbox() or (0, 0, width, height)
+        center = ((bbox[0] + bbox[2]) // 2, (bbox[1] + bbox[3]) // 2)
+        mask = _rotate_layer(_scale_layer(mask, factor), angle, center)
+        outline = _rotate_layer(_scale_layer(outline, factor), angle, center)
+        shadow = _rotate_layer(_scale_layer(shadow, factor), angle, center)
+        mask = _shift_layer(mask, 0, dy)
+        outline = _shift_layer(outline, 0, dy)
+        shadow = _shift_layer(shadow, 0, dy)
+    elif motion == "levitate":
+        # Levitación suave: flota arriba y abajo con un vaivén amplio y continuo.
+        kf = (
+            (0.000, 0.010), (0.139, 0.115), (0.206, -0.045), (0.356, -0.115),
+            (0.517, 0.082), (0.667, -0.049), (0.817, 0.049), (0.956, 0.010),
+            (1.000, 0.010),
+        )
+        dyf = 0.0
+        for i in range(len(kf) - 1):
+            t0, v0 = kf[i]
+            t1, v1 = kf[i + 1]
+            if t <= t1 or i == len(kf) - 2:
+                span = max(1e-6, t1 - t0)
+                p = max(0.0, min(1.0, (t - t0) / span))
+                p = p * p * (3 - 2 * p)
+                dyf = v0 + (v1 - v0) * p
+                break
+        dy = dyf * height * 0.22
+        factor = 1.04 + 0.015 * math.sin(2 * math.pi * t)
+        mask = _shift_layer(_scale_layer(mask, factor), 0, dy)
+        outline = _shift_layer(_scale_layer(outline, factor), 0, dy)
+        shadow = _shift_layer(_scale_layer(shadow, factor), 0, dy)
 
     return mask, outline, shadow, cursor
 
@@ -1938,6 +2002,66 @@ def _logo_frame(
         )
         frame = _scale(glow, 1.12)
         frame.alpha_composite(logo)
+        return frame
+
+    if effect == "spring":
+        # Rebote elástico amortiguado (como el emoji de CryptoPJ).
+        kf = (
+            (0.000, 1.000), (0.167, 0.750), (0.211, 1.000), (0.254, 1.107),
+            (0.339, 0.947), (0.425, 1.026), (0.510, 0.987), (0.596, 1.006),
+            (0.681, 0.997), (0.767, 1.002), (0.852, 0.999), (0.876, 0.999),
+            (0.994, 1.000),
+        )
+        factor = 1.0
+        for i in range(len(kf) - 1):
+            t0, v0 = kf[i]
+            t1, v1 = kf[i + 1]
+            if t <= t1 or i == len(kf) - 2:
+                span = max(1e-6, t1 - t0)
+                p = max(0.0, min(1.0, (t - t0) / span))
+                factor = v0 + (v1 - v0) * p
+                break
+        return _scale(logo, factor)
+
+    if effect == "wiggle":
+        # Meneo vivo: giro y tamaño cambian en un vaivén enérgico.
+        cycle = 2 * math.pi * t
+        angle = 18 * math.sin(cycle) * math.cos(cycle * 0.5 + 0.4)
+        factor = 0.92 + 0.10 * (0.5 + 0.5 * math.sin(2 * cycle))
+        dy = int(-math.sin(cycle) * size * 0.035)
+        image = _scale(logo, factor)
+        if shape == "circle":
+            rotated = image.rotate(angle, resample=Image.BICUBIC)
+        else:
+            rotated = _fit(
+                image.rotate(angle, resample=Image.BICUBIC, expand=True), size
+            )
+        frame = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        frame.paste(rotated, (0, dy), rotated)
+        return frame
+
+    if effect == "levitate":
+        # Levitación suave: flota arriba y abajo de forma continua.
+        kf = (
+            (0.000, 0.010), (0.139, 0.115), (0.206, -0.045), (0.356, -0.115),
+            (0.517, 0.082), (0.667, -0.049), (0.817, 0.049), (0.956, 0.010),
+            (1.000, 0.010),
+        )
+        dyf = 0.0
+        for i in range(len(kf) - 1):
+            t0, v0 = kf[i]
+            t1, v1 = kf[i + 1]
+            if t <= t1 or i == len(kf) - 2:
+                span = max(1e-6, t1 - t0)
+                p = max(0.0, min(1.0, (t - t0) / span))
+                p = p * p * (3 - 2 * p)
+                dyf = v0 + (v1 - v0) * p
+                break
+        dy = int(dyf * size * 0.22)
+        factor = 1.04 + 0.015 * math.sin(2 * math.pi * t)
+        image = _scale(logo, factor)
+        frame = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        frame.paste(image, (0, dy), image)
         return frame
 
     return logo.copy()

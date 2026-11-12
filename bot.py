@@ -970,7 +970,7 @@ ANIM_SPEED_ORDER = ("slow", "normal", "fast")
 # Cada opción del menú lleva un custom emoji de muestra para que se vea cómo
 # queda antes de elegirla. El bot crea una vez un pack de ejemplos propio y
 # guarda los ids en data/examples.json.
-EXAMPLE_VERSION = 8
+EXAMPLE_VERSION = 9
 EXAMPLE_TEXT = "Abcd"
 EXAMPLE_CACHE_KEY = 0
 # Cada opción puede ocupar varios emojis (texto grande repartido en trozos).
