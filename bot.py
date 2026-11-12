@@ -944,6 +944,7 @@ class AnimWizard(StatesGroup):
     border = State()
     textcolor = State()
     letter_stroke = State()
+    shadow = State()
     motion = State()
     preview = State()
 
@@ -957,6 +958,7 @@ ANIM_STYLE_DEFAULT: dict[str, Any] = {
     "speed": "normal",
     "text_color": "auto",
     "stroke_color": "auto",
+    "shadow": "on",
     "motion": "none",
 }
 ANIM_SPEED_ORDER = ("slow", "normal", "fast")
@@ -982,6 +984,7 @@ EXAMPLE_TITLES = {
     "border": "💫 Elige el borde:",
     "tcol": "🅰 Elige el color de la letra:",
     "stroke": "✏️ Elige el borde de la letra:",
+    "shadow": "🌑 ¿Lleva sombra en el texto?",
     "motion": "🎞 Elige la animación del texto:",
 }
 
@@ -1051,6 +1054,9 @@ def example_entries(kind: str) -> list[tuple[str, str, str]]:
             (f"motion:{key}", "🎞", str(label))
             for key, label in animated.MOTIONS.items()
         ]
+    if kind == "shadow":
+        # Sin emojis de muestra: la sombra se aprecia en la vista previa.
+        return []
     return [
         (f"border:{key}", "💫", str(label))
         for key, label in animated.BORDERS.items()
@@ -1351,6 +1357,21 @@ def anim_stroke_kb(back: bool = False) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def anim_shadow_kb(back: bool = False) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=label, callback_data=f"anim:shadow:{key}"
+            )
+            for key, label in animated.SHADOWS.items()
+        ]
+    ]
+    if back:
+        rows.append(anim_back_row())
+    rows.append(anim_cancel_row())
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def anim_border_kb(back: bool = False) -> InlineKeyboardMarkup:
     keys = list(animated.BORDERS)
     rows = []
@@ -1400,6 +1421,7 @@ def anim_preview_kb() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="🎞 Animación", callback_data="anim:motion"),
             ],
             [InlineKeyboardButton(text="⚡ Velocidad", callback_data="anim:speed")],
+            [InlineKeyboardButton(text="🌑 Sombra", callback_data="anim:shadow")],
             [InlineKeyboardButton(text="🔤 Fuente", callback_data="anim:font")],
             [
                 InlineKeyboardButton(text="🅰 Color letra", callback_data="anim:textcolor"),
@@ -1444,13 +1466,14 @@ def anim_preview_text(style: dict[str, Any], premium_count: int = 0) -> str:
         str(style.get("stroke_color") or "auto"), "Automático"
     )
     motion = animated.MOTIONS.get(str(style.get("motion") or "none"), "Sin animación")
+    shadow = animated.SHADOWS.get(str(style.get("shadow") or "on"), "Con sombra")
     return (
         "✨ <b>Tu emoji animado</b>\n\n"
         f"{text_line}"
         f"Paleta: {palette} · Fondo: {animated.BACKGROUNDS[style['background']]}\n"
         f"Fuente: {font_label} · Borde: {animated.BORDERS[style['border']]}\n"
         f"Color: {text_color} · Borde letra: {stroke_color}\n"
-        f"Animación: {motion} · Velocidad: {animated.SPEED_LABELS[style['speed']]}\n\n"
+        f"Sombra: {shadow} · Animación: {motion} · Velocidad: {animated.SPEED_LABELS[style['speed']]}\n\n"
         "Si te gusta, pulsa <b>✅ Crear pack</b>."
     )
 
@@ -1475,6 +1498,7 @@ async def generate_anim_chunks(
         text_color_key=str(style.get("text_color") or "auto"),
         stroke_color_key=str(style.get("stroke_color") or "auto"),
         motion=str(style.get("motion") or "none"),
+        with_shadow=str(style.get("shadow") or "on") != "off",
     )
 
 
@@ -1494,6 +1518,7 @@ async def generate_anim_preview(
         text_color_key=str(style.get("text_color") or "auto"),
         stroke_color_key=str(style.get("stroke_color") or "auto"),
         motion=str(style.get("motion") or "none"),
+        with_shadow=str(style.get("shadow") or "on") != "off",
     )
 
 
@@ -1930,6 +1955,30 @@ async def cb_anim_stroke_color(
         await send_anim_preview(callback, bot, state, style)
         return
 
+    await state.set_state(AnimWizard.shadow)
+    await callback.answer()
+    await _edit_menu(callback, "shadow", anim_shadow_kb())
+
+
+@dp.callback_query(
+    F.data.startswith("anim:shadow:"),
+    StateFilter(AnimWizard.shadow, AnimWizard.preview),
+)
+async def cb_anim_shadow(
+    callback: CallbackQuery, bot: Bot, state: FSMContext
+) -> None:
+    key = callback.data.split(":", 2)[2]
+    if key not in animated.SHADOWS:
+        await callback.answer("Esa opción no existe.", show_alert=True)
+        return
+    style = anim_style(await state.get_data())
+    style["shadow"] = key
+    await state.update_data(style=style)
+
+    if await state.get_state() == AnimWizard.preview.state:
+        await send_anim_preview(callback, bot, state, style)
+        return
+
     await state.set_state(AnimWizard.motion)
     await callback.answer()
     await _edit_menu(callback, "motion", anim_motion_kb())
@@ -1967,6 +2016,12 @@ async def cb_anim_open_text_color(callback: CallbackQuery) -> None:
 @dp.callback_query(F.data == "anim:strokecolor", AnimWizard.preview)
 async def cb_anim_open_stroke_color(callback: CallbackQuery) -> None:
     await _edit_menu(callback, "stroke", anim_stroke_kb(back=True))
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "anim:shadow", AnimWizard.preview)
+async def cb_anim_open_shadow(callback: CallbackQuery) -> None:
+    await _edit_menu(callback, "shadow", anim_shadow_kb(back=True))
     await callback.answer()
 
 

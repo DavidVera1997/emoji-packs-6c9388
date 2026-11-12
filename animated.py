@@ -106,6 +106,8 @@ BACKGROUNDS = {
     "transparent": "Transparente",
 }
 
+SHADOWS = {"on": "Con sombra", "off": "Sin sombra"}
+
 BORDERS = {
     "none": "Sin borde",
     "ring": "Anillo",
@@ -961,6 +963,7 @@ def _premium_art(
     frame_index: int,
     total_frames: int,
     reveal_x: int | None = None,
+    with_shadow: bool = True,
 ) -> tuple[Image.Image, Image.Image]:
     """Capas (sombra, dibujo) de cada emoji premium en el fotograma actual.
 
@@ -985,7 +988,7 @@ def _premium_art(
         position = min(position, len(frames) - 1)
         frame = frames[position]
         shadow_alpha = shadows[position] if position < len(shadows) else None
-        if shadow_alpha is not None:
+        if with_shadow and shadow_alpha is not None:
             shadow_frame = Image.new("RGBA", frame.size, (0, 0, 0, 0))
             shadow_frame.putalpha(shadow_alpha)
             shade.alpha_composite(shadow_frame, (x, y + shadow_dy))
@@ -1051,6 +1054,7 @@ def word_count(
 # Render
 # --------------------------------------------------------------------------- #
 ROUND_RADIUS = 0.24  # proporción del lado para las esquinas redondeadas
+TYPE_FRACTION = 0.55  # parte del loop que tarda la máquina de escribir
 
 
 def _blank_like(image: Image.Image) -> Image.Image:
@@ -1119,8 +1123,11 @@ def _motion_layers(
             return mask, outline, shadow, None
         left, right = bbox[0], bbox[2]
         span = max(1, right - left)
-        progress = min(1.0, t / 0.55)
-        progress = 1 - (1 - progress) ** 2
+        # Avance lineal: la palabra se escribe a velocidad constante de punta a
+        # punta. Con un ease-out el primer trozo se escribía casi de golpe y el
+        # último tardaba mucho más, y al verlo como emojis separados parecía
+        # que cada uno iba a su propio ritmo.
+        progress = min(1.0, t / TYPE_FRACTION)
         edge = int(left + span * progress)
         wipe = Image.new("L", (width, height), 0)
         ImageDraw.Draw(wipe).rectangle((0, 0, edge, height), fill=255)
@@ -1195,6 +1202,7 @@ def _render_word(
     text_color_key: str = "auto",
     stroke_color_key: str = "auto",
     motion: str = "none",
+    with_shadow: bool = True,
 ) -> tuple[list[list[bytes]], list[bytes]]:
     """Renderiza la palabra completa y devuelve los trozos y la tira unida.
 
@@ -1284,6 +1292,9 @@ def _render_word(
         shadow.putalpha(
             ImageChops.multiply(shadow.getchannel("A"), badge_alpha)
         )
+    if not with_shadow:
+        # La sombra es una capa aparte: si se apaga, el texto queda limpio.
+        shadow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
 
     total_frames = FRAME_COUNT if frame_limit is None else max(1, min(FRAME_COUNT, frame_limit))
     static_mask = text_layer["mask"]
@@ -1352,6 +1363,7 @@ def _render_word(
                 index,
                 total_frames,
                 reveal_x=cursor[0] if cursor is not None else None,
+                with_shadow=with_shadow,
             )
             canvas.alpha_composite(emoji_shadow)
             canvas.alpha_composite(emoji_art)
@@ -1426,6 +1438,7 @@ def render_word_frames(
     text_color_key: str = "auto",
     stroke_color_key: str = "auto",
     motion: str = "none",
+    with_shadow: bool = True,
 ) -> list[list[bytes]]:
     """Un fotograma por trozo: la palabra se corta en cuadrados exactos."""
     chunks, _ = _render_word(
@@ -1440,6 +1453,7 @@ def render_word_frames(
         text_color_key=text_color_key,
         stroke_color_key=stroke_color_key,
         motion=motion,
+        with_shadow=with_shadow,
     )
     return chunks
 
@@ -1455,6 +1469,7 @@ def render_word_joined(
     text_color_key: str = "auto",
     stroke_color_key: str = "auto",
     motion: str = "none",
+    with_shadow: bool = True,
 ) -> list[bytes]:
     """La palabra entera en una sola tira (para la vista previa sin huecos)."""
     _, joined = _render_word(
@@ -1469,6 +1484,7 @@ def render_word_joined(
         text_color_key=text_color_key,
         stroke_color_key=stroke_color_key,
         motion=motion,
+        with_shadow=with_shadow,
     )
     return joined
 
@@ -2030,6 +2046,7 @@ def generate_example(
     motion: str = "none",
     frames: int = EXAMPLE_FRAMES,
     moving: bool = True,
+    with_shadow: bool = True,
 ) -> list[bytes]:
     """Muestras de un estilo del menú: uno o varios emojis de 100x100.
 
@@ -2050,6 +2067,7 @@ def generate_example(
         text_color_key=text_color_key,
         stroke_color_key=stroke_color_key,
         motion=motion,
+        with_shadow=with_shadow,
     )
     if moving:
         return [encode_webm(chunk) for chunk in chunks if chunk]
@@ -2067,6 +2085,7 @@ def generate_word(
     text_color_key: str = "auto",
     stroke_color_key: str = "auto",
     motion: str = "none",
+    with_shadow: bool = True,
 ) -> list[bytes]:
     """Un .webm por trozo; el fondo y el efecto son continuos entre trozos."""
     return [
@@ -2082,6 +2101,7 @@ def generate_word(
             text_color_key=text_color_key,
             stroke_color_key=stroke_color_key,
             motion=motion,
+            with_shadow=with_shadow,
         )
     ]
 
@@ -2097,6 +2117,7 @@ def generate_word_preview(
     text_color_key: str = "auto",
     stroke_color_key: str = "auto",
     motion: str = "none",
+    with_shadow: bool = True,
 ) -> bytes:
     """Vista previa en una sola tira, sin huecos entre trozos."""
     frames = render_word_joined(
@@ -2110,6 +2131,7 @@ def generate_word_preview(
         text_color_key=text_color_key,
         stroke_color_key=stroke_color_key,
         motion=motion,
+        with_shadow=with_shadow,
     )
     width = len(frames[0]) // (SIZE * 4)
     height = SIZE
