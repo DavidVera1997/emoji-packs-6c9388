@@ -949,7 +949,7 @@ def _draw_word(
         shadows = [
             frame.getchannel("A")
             .filter(ImageFilter.GaussianBlur(stroke * 0.8))
-            .point(lambda value: int(value * 0.55))
+            .point(lambda value: int(value * 0.72))
             for frame in frames
         ]
         placements.append((x, y, int(stroke * 0.6), frames, shadows))
@@ -959,7 +959,7 @@ def _draw_word(
     # borde del emoji) y su sombra se calcula fotograma a fotograma.
     shadow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     shadow.putalpha(outer.filter(ImageFilter.GaussianBlur(stroke * 0.8)))
-    shadow = _tinted(shadow, shadow.getchannel("A").point(lambda v: int(v * 0.55)))
+    shadow = _tinted(shadow, shadow.getchannel("A").point(lambda v: int(v * 0.72)))
     shadow = ImageChops.offset(shadow, 0, int(stroke * 0.6))
     return {
         "mask": inner,
@@ -1565,6 +1565,28 @@ def _render_word(
                 (x, top, x + bar_width, bottom), fill=(*text_color, 220)
             )
             canvas.alpha_composite(cursor_layer)
+        # Brillo móvil para imitar el acabado de los emojis originales.
+        if motion in ("spring", "wiggle", "levitate"):
+            gloss = Image.new("L", (width, height), 0)
+            # Banda de brillo que recorre el texto en cada ciclo.
+            gx = -height + t * (width + height * 2)
+            skew = int(height * 0.9)
+            band_w = max(18, int(width * 0.09))
+            ImageDraw.Draw(gloss).polygon(
+                [
+                    (gx, 0),
+                    (gx + band_w, 0),
+                    (gx + band_w + skew, height),
+                    (gx + skew, height),
+                ],
+                fill=230,
+            )
+            gloss = gloss.filter(ImageFilter.GaussianBlur(max(6, height // 10)))
+            gloss_alpha = ImageChops.multiply(gloss, mask)
+            shine = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+            shine.putalpha(gloss_alpha.point(lambda v: int(v * 0.55)))
+            canvas.alpha_composite(shine)
+
         # Los emojis premium conservan su color y su animación, y van encima
         # del texto como una letra más.
         if text_layer["placements"]:
@@ -2132,6 +2154,26 @@ def render_logo_frames(
     for index in range(FRAME_COUNT):
         t = index / FRAME_COUNT
         frame = _logo_frame(logo, effect, t, colors, conic, ring, shape)
+        if effect in ("spring", "wiggle", "levitate"):
+            size = frame.width
+            gloss = Image.new("L", (size, size), 0)
+            gx = -size + t * (size * 3)
+            skew = int(size * 0.9)
+            band_w = max(18, int(size * 0.10))
+            ImageDraw.Draw(gloss).polygon(
+                [
+                    (gx, 0),
+                    (gx + band_w, 0),
+                    (gx + band_w + skew, size),
+                    (gx + skew, size),
+                ],
+                fill=230,
+            )
+            gloss = gloss.filter(ImageFilter.GaussianBlur(max(6, size // 10)))
+            gloss_alpha = ImageChops.multiply(gloss, frame.getchannel("A"))
+            shine = Image.new("RGBA", (size, size), (255, 255, 255, 0))
+            shine.putalpha(gloss_alpha.point(lambda v: int(v * 0.45)))
+            frame.alpha_composite(shine)
         if background != "transparent":
             layer = _logo_background(
                 logo.width, colors, background, t * turns
